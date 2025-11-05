@@ -1,0 +1,75 @@
+# --- Environnements virtuels ---
+venv/
+.env/
+.venv/
+
+# --- Données volumineuses ---
+data/raw/
+data/interim/
+data/processed/
+data/final/
+*.csv
+*.xlsx
+*.parquet
+*.h5
+*.pkl
+*.npz
+
+# --- Fichiers temporaires et caches ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dll
+*.log
+*.tmp
+*.bak
+*.swp
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+.notebook/
+*.nbconvert.ipynb
+
+# --- Sorties et résultats ---
+outputs/
+results/
+models/
+checkpoints/
+runs/
+logs/
+
+# --- Configuration / secrets ---
+*.env
+config.yaml
+*.json
+secrets.*
+credentials.*
+
+# --- IDE / OS spécifiques ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Distribution / build ---
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# --- Tests / coverage ---
+.coverage
+htmlcov/
+.tox/
+.nox/
+pytest_cache/
+junit.xml
+
+# --- Autres fichiers inutiles ---
+*.zip
+*.tar.gz
+*.rar
+*.7z
