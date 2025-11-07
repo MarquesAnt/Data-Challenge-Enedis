@@ -1,0 +1,5 @@
+Nombre de lignes X_train : 20000
+Nombre de colonnes X_train : 13
+Nombre de lignes X_val : 128853
+Nombre de colonnes X_val : 11
+Exemple colonnes : col, timestamp, weekday, hour, mean, std, y, lag_1, lag_2, lag_3
