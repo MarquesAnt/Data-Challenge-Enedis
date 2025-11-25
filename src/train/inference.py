@@ -10,45 +10,66 @@ from train.train_core import train_model
 
 def predict(model, X_df, scaler, config, batch_size=64):
     """
-    Prédire les valeurs manquantes avec ou sans interpolation automatiquement.
-
-    - Si config.use_interpolation = True → TimeSeriesDatasetWithInterp
-    - Sinon → TimeSeriesDataset
+    Prédire les valeurs manquantes avec le FeatureExtractor de la config
+    
+    Args:
+        model: modèle BiLSTM entraîné
+        X_df: DataFrame avec colonnes à prédire
+        scaler: StandardScaler utilisé pendant l'entraînement
+        config: Config object (contient feature_extractor)
+        batch_size: taille des batchs pour prédiction
+    
+    Returns:
+        result: DataFrame avec valeurs imputées
     """
+    from train.datasets.TimeSeries import TimeSeriesDataset
+    
+    print("\n" + "="*60)
+    print("PRÉDICTION")
+    print("="*60)
+    print(f"Features utilisées : {config.feature_extractor}")
+    print(f"Colonnes à prédire : {len(X_df.columns)}")
 
-    # 1. Choix automatique du dataset
-    if config.use_interpolation:
-        DatasetClass = TimeSeriesDatasetWithInterp
-        print("\nPrédiction : interpolation activée")
-    else:
-        DatasetClass = TimeSeriesDataset
-        print("\nPrédiction : modèle standard")
-
-    # 2. Dataset
-    dataset = DatasetClass(
+    # 1. Créer le dataset avec FeatureExtractor
+    dataset = TimeSeriesDataset(
         X=X_df,
         y=None,
+        feature_extractor=config.feature_extractor,  # ← Depuis config
         scaler=scaler,
         fit_scaler=False
     )
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-    # 3. Prédiction
+    # 2. Prédiction
     model.eval()
     all_predictions = []
 
     with torch.no_grad():
-        for x, mask in tqdm(loader, desc="Predicting"):
-            x, mask = x.to(config.device), mask.to(config.device)
+        for batch_data in tqdm(loader, desc="Predicting"):
+            # Gérer le cas où on a (x, mask) ou juste x
+            if isinstance(batch_data, (list, tuple)):
+                if len(batch_data) == 2:
+                    x, mask = batch_data
+                else:
+                    x = batch_data[0]
+                    mask = None
+            else:
+                x = batch_data
+                mask = None
+            
+            x = x.to(config.device)
+            if mask is not None:
+                mask = mask.to(config.device)
+            
             pred = model(x, mask)
             all_predictions.append(pred.cpu().numpy())
 
-    # 4. Recomposition batchs → matrice complète
+    # 3. Recomposition batchs → matrice complète
     predictions = np.concatenate(all_predictions, axis=0)  # (n_series, timesteps, 1)
     predictions = predictions.squeeze(-1).T                # → (timesteps, n_series)
 
-    # 5. Dénormalisation
+    # 4. Dénormalisation
     predictions_denorm = scaler.inverse_transform(predictions.reshape(-1, 1))
     predictions_denorm = predictions_denorm.reshape(predictions.shape)
 
@@ -58,10 +79,13 @@ def predict(model, X_df, scaler, config, batch_size=64):
         columns=X_df.columns
     )
 
-    # 6. Remplacement des NaNs uniquement
+    # 5. Remplacement des NaNs uniquement
     result = X_df.copy()
     nan_mask = X_df.isna()
     result[nan_mask] = pred_df[nan_mask]
+    
+    n_imputed = nan_mask.sum().sum()
+    print(f"\n✓ Prédiction terminée : {n_imputed:,} valeurs imputées")
 
     return result
 

@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from train.train_core import train_model
-
+from train.datasets.TimeSeries import TimeSeriesDataset
 
 def analyze_missing_patterns(X_holed):
     """
@@ -85,7 +85,7 @@ def create_masked_data_realistic(X_clean, X_holed_reference, seed=42, oversample
     if oversample_large and len(large_holes) > 0:
         large_holes_repeated = np.repeat(large_holes, 5)
         hole_sizes_augmented = np.concatenate([hole_sizes, large_holes_repeated])
-        print(f"\n Sur-échantillonnage ×5 des gros trous")
+        print(f"\n Sur-échantillonnage x5 des gros trous")
         print(f"  - Gros trous après : {len(large_holes)*6} ({len(large_holes)*6/len(hole_sizes_augmented)*100:.1f}%)")
     else:
         hole_sizes_augmented = hole_sizes
@@ -180,7 +180,6 @@ def pretrain_model(
     X_clean_all,
     X_holed_reference,
     config,
-    DatasetClass,
     n_epochs_pretrain
 ):
     """
@@ -206,7 +205,6 @@ def pretrain_model(
     print("PHASE 1 : PRÉ-ENTRAÎNEMENT GÉNÉRIQUE")
     print("="*60)
     print(f"Nombre de courbes complètes : {len(X_clean_all.columns):,}")
-    print(f"Dataset utilisé : {DatasetClass.__name__}")
 
     # 1. Masquage réaliste
     X_masked, Y_true = create_masked_data_realistic(
@@ -224,19 +222,19 @@ def pretrain_model(
     
     print(f"\nPré-entraînement : {len(train_cols):,} train, {len(val_cols):,} val")
 
-    # 3. Dataset TRAIN
-    train_dataset = DatasetClass(
+    # Dataset avec FeatureExtractor de la config
+    train_dataset = TimeSeriesDataset(
         X=X_masked[train_cols],
         y=Y_true[train_cols],
+        feature_extractor=config.feature_extractor,  # ← Depuis config
         fit_scaler=True
     )
-
-    # 4. Dataset VAL
-    val_dataset = DatasetClass(
+    
+    val_dataset = TimeSeriesDataset(
         X=X_masked[val_cols],
         y=Y_true[val_cols],
-        scaler=train_dataset.scaler
-    )
+        feature_extractor=config.feature_extractor,  # ← Depuis config
+        scaler=train_dataset.scaler)
 
     # 5. Loaders
     train_loader = DataLoader(
@@ -282,11 +280,10 @@ def finetune_model(
     X_tr,
     Y_tr,
     holed_cols,
-    config,
-    DatasetClass
-):
+    config
+):  # ← Plus de DatasetClass !
     """
-    Fine-tuning générique compatible avec ou sans interpolation.
+    Fine-tuning générique utilisant le FeatureExtractor de la config
     
     Args:
         model: modèle pré-entraîné
@@ -294,17 +291,16 @@ def finetune_model(
         X_tr: DataFrame X_train
         Y_tr: vraies valeurs
         holed_cols: colonnes à trous
-        config: Config object
-        DatasetClass: TimeSeriesDataset ou TimeSeriesDatasetWithInterp
+        config: Config object (contient feature_extractor)
     
     Returns:
         model: modèle fine-tuné
     """
 
     print("\n" + "="*60)
-    print("PHASE 2 : FINE-TUNING GÉNÉRIQUE")
+    print("PHASE 2 : FINE-TUNING")
     print("="*60)
-    print(f"Dataset utilisé : {DatasetClass.__name__}")
+    print(f"Features utilisées : {config.feature_extractor}")
 
     # Split 80/20
     n = len(holed_cols)
@@ -314,16 +310,18 @@ def finetune_model(
     
     print(f"Fine-tuning : {len(train_cols)} train, {len(val_cols)} val")
 
-    # Datasets
-    train_dataset = DatasetClass(
+    # Datasets avec FeatureExtractor de la config
+    train_dataset = TimeSeriesDataset(
         X=X_tr[train_cols],
         y=Y_tr[train_cols],
+        feature_extractor=config.feature_extractor,  # ← Depuis config
         scaler=scaler,
         fit_scaler=False
     )
-    val_dataset = DatasetClass(
+    val_dataset = TimeSeriesDataset(
         X=X_tr[val_cols],
         y=Y_tr[val_cols],
+        feature_extractor=config.feature_extractor,  # ← Depuis config
         scaler=scaler,
         fit_scaler=False
     )
@@ -351,10 +349,10 @@ def finetune_model(
     config.patience = 5     # Plus agressif (800 courbes seulement)
 
     print(f"\nHyperparamètres fine-tuning :")
-    print(f"  - Learning rate : {config.learning_rate:.6f} (x0.3)")
+    print(f"  - Learning rate : {config.learning_rate:.6f} (×0.3)")
     print(f"  - Epochs max : {config.num_epochs}")
     print(f"  - Patience : {config.patience}")
-    print("\n Attention : Le fine-tuning peut dégrader les performances")
+    print("\n⚠️  Attention : Le fine-tuning peut dégrader les performances")
     print("    si le modèle pré-entraîné est déjà excellent.")
 
     # Fine-tuning
