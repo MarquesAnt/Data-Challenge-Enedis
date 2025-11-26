@@ -19,26 +19,24 @@ class TemporalFeatures(Feature):
         
         # Heure (0-23)
         if self.include_hour:
-            hour = X.index.hour.values.astype(float)
+            hour = X.index.hour.values.astype(float)  # ← .values ici OK
             if self.cyclic:
-                # Encoding cyclique : sin/cos
                 hour_sin = np.sin(2 * np.pi * hour / 24)
                 hour_cos = np.cos(2 * np.pi * hour / 24)
                 features.extend([hour_sin.reshape(-1, 1), 
-                               hour_cos.reshape(-1, 1)])
+                            hour_cos.reshape(-1, 1)])
             else:
-                # Normalisation simple
                 hour_norm = hour / 24.0
                 features.append(hour_norm.reshape(-1, 1))
         
         # Jour de la semaine (0-6)
         if self.include_day:
-            day = X.index.dayofweek.values.astype(float)
+            day = X.index.dayofweek.values.astype(float)  # ← .values ici OK
             if self.cyclic:
                 day_sin = np.sin(2 * np.pi * day / 7)
                 day_cos = np.cos(2 * np.pi * day / 7)
                 features.extend([day_sin.reshape(-1, 1), 
-                               day_cos.reshape(-1, 1)])
+                            day_cos.reshape(-1, 1)])
             else:
                 day_norm = day / 7.0
                 features.append(day_norm.reshape(-1, 1))
@@ -46,7 +44,9 @@ class TemporalFeatures(Feature):
         # Week-end (0/1)
         if self.include_weekend:
             is_weekend = (X.index.dayofweek >= 5).astype(float)
-            features.append(is_weekend.values.reshape(-1, 1))
+            #  AVANT : is_weekend.values.reshape(-1, 1)
+            #  APRÈS : is_weekend déjà numpy array
+            features.append(is_weekend.reshape(-1, 1))
         
         # Concatener toutes les features
         return np.concatenate(features, axis=1)

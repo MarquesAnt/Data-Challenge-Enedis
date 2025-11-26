@@ -55,7 +55,7 @@ def train_bilstm(X_tr, X_test, Y_tr, holed_cols, config,
         X_holed_reference=X_tr[holed_cols],
         config=config,
         n_epochs_pretrain=n_epochs_pretrain
-    )  # ← Plus de DatasetClass !
+    )  
 
     # ==============================
     # 4. FINE-TUNING (optionnel)
@@ -68,7 +68,7 @@ def train_bilstm(X_tr, X_test, Y_tr, holed_cols, config,
             Y_tr=Y_tr,
             holed_cols=holed_cols,
             config=config
-        )  # ← Plus de DatasetClass !
+        )  
     else:
         print("\n Fine-tuning SKIP")
 

@@ -94,8 +94,8 @@ def create_masked_data_realistic(X_clean, X_holed_reference, seed=42, oversample
     if X_clean.isna().any().any():
         print(" X_clean contient des NaN, nettoyage en cours...")
         X_clean = (X_clean.interpolate(method='linear', axis=0)
-                           .fillna(method='bfill')
-                           .fillna(method='ffill'))
+                           .bfill()
+                           .ffill())
         print("✓ NaN nettoyés")
 
     X_masked = X_clean.copy()
@@ -205,6 +205,12 @@ def pretrain_model(
     print("PHASE 1 : PRÉ-ENTRAÎNEMENT GÉNÉRIQUE")
     print("="*60)
     print(f"Nombre de courbes complètes : {len(X_clean_all.columns):,}")
+    
+    if config.feature_extractor is None:
+        config.build_feature_extractor(X_train_clean=X_clean_all)
+    
+    print(f"Features : {config.feature_extractor}")
+    print(f"Nombre de courbes : {len(X_clean_all.columns):,}")
 
     # 1. Masquage réaliste
     X_masked, Y_true = create_masked_data_realistic(
@@ -352,7 +358,7 @@ def finetune_model(
     print(f"  - Learning rate : {config.learning_rate:.6f} (×0.3)")
     print(f"  - Epochs max : {config.num_epochs}")
     print(f"  - Patience : {config.patience}")
-    print("\n⚠️  Attention : Le fine-tuning peut dégrader les performances")
+    print("\n Attention : Le fine-tuning peut dégrader les performances")
     print("    si le modèle pré-entraîné est déjà excellent.")
 
     # Fine-tuning
