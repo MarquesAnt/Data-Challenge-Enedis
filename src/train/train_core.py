@@ -7,6 +7,13 @@ def train_epoch(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0
     
+    first_batch = True
+    
+    if first_batch:
+        print(f" Training on device: {device}")
+        print(f"  model device: {next(model.parameters()).device}")
+        first_batch = False
+    
     for x, mask, y in tqdm(loader, desc="Training", leave=False):
         x, mask, y = x.to(device), mask.to(device), y.to(device)
         

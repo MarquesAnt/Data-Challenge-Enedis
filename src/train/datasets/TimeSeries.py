@@ -6,26 +6,16 @@ from sklearn.preprocessing import StandardScaler
 from models.feature_extractors import FeatureExtractor
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+
 
 
 class TimeSeriesDataset(Dataset):
-    """
-    Dataset flexible qui utilise un FeatureExtractor
-    """
-    
-    def __init__(self, X, y=None, feature_extractor=None, 
-                 scaler=None, fit_scaler=False):
-        """
-        Args:
-            X: DataFrame (timestamps × courbes)
-            y: DataFrame avec vraies valeurs (optionnel)
-            feature_extractor: FeatureExtractor pour composer les features
-            scaler: StandardScaler
-            fit_scaler: si True, fit le scaler
-        """
-        self.X = X.values.T  # (n_series, n_timesteps)
+    def __init__(self, X, y=None, feature_extractor=None, scaler=None, fit_scaler=False):
+        """Dataset avec features précalculées"""
+        
+        self.X = X.values.T
         self.y = y.values.T if y is not None else None
-        self.feature_extractor = feature_extractor
         
         # Scaler
         if fit_scaler:
@@ -43,27 +33,36 @@ class TimeSeriesDataset(Dataset):
         else:
             self.y_scaled = None
         
-        # Index pour retrouver les timestamps
+        #  NOUVEAU : PRÉCALCULER TOUTES LES FEATURES
+        print(f"   Précalcul des features pour {self.X.shape[0]} séries...")
+        self.features_precalculated = self._precalculate_features(
+            X, feature_extractor, self.scaler
+        )
+        print(f"  ✓ Features précalculées : {self.features_precalculated.shape}")
+        
         self.index = X.index
         self.columns = X.columns
+    
+    def _precalculate_features(self, X, feature_extractor, scaler):
+        """Précalculer toutes les features une seule fois"""
+        all_features = []
+        
+        for col in tqdm(X.columns, desc="Extracting features"):
+            X_series = pd.DataFrame(X[col], columns=[col])
+            features = feature_extractor.extract(X_series, scaler)
+            all_features.append(features)
+        
+        # Shape: (n_series, n_timesteps, n_features)
+        return np.array(all_features, dtype=np.float32)
     
     def __len__(self):
         return self.X.shape[0]
     
     def __getitem__(self, idx):
-        # Reconstruire un DataFrame pour cette série
-        col_name = self.columns[idx]
-        X_series = pd.DataFrame(
-            self.X[idx], 
-            index=self.index, 
-            columns=[col_name]
-        )
+        #  Récupérer les features précalculées (très rapide!)
+        x = torch.FloatTensor(self.features_precalculated[idx])
         
-        # Extraire les features via le FeatureExtractor
-        features = self.feature_extractor.extract(X_series, self.scaler)
-        x = torch.FloatTensor(features)  # (timesteps, feature_dim)
-        
-        # Mask (toujours utile pour la loss)
+        # Mask
         mask = torch.FloatTensor(
             (~np.isnan(self.X[idx])).astype(np.float32)
         ).unsqueeze(-1)

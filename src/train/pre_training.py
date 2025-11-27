@@ -7,6 +7,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from train.train_core import train_model
 from train.datasets.TimeSeries import TimeSeriesDataset
+from sklearn.model_selection import train_test_split
+
 
 def analyze_missing_patterns(X_holed):
     """
@@ -174,6 +176,94 @@ def create_masked_data_realistic(X_clean, X_holed_reference, seed=42, oversample
     
     return X_masked, Y_true
 
+def stratified_split_by_holes(X_masked, test_size=0.1, random_state=42):
+    """
+    Split stratifié basé sur les caractéristiques des trous de chaque colonne
+    Avec fallback si stratification impossible
+    """
+    cols = list(X_masked.columns)
+    
+    # Calculer les caractéristiques de chaque colonne
+    col_features = []
+    for col in cols:
+        series = X_masked[col]
+        na_rate = series.isna().mean()
+        
+        # Taille moyenne des trous
+        mask = series.isna()
+        hole_sizes = []
+        in_hole = False
+        current_size = 0
+        
+        for is_na in mask:
+            if is_na:
+                current_size += 1
+                in_hole = True
+            elif in_hole:
+                hole_sizes.append(current_size)
+                current_size = 0
+                in_hole = False
+        if in_hole:
+            hole_sizes.append(current_size)
+        
+        max_hole_size = np.max(hole_sizes) if hole_sizes else 0
+        
+        col_features.append({
+            'col': col,
+            'na_rate': na_rate,
+            'max_hole': max_hole_size
+        })
+    
+    df_features = pd.DataFrame(col_features)
+    
+    # Créer des catégories pour stratification (moins de bins = moins de risque)
+    try:
+        df_features['na_bin'] = pd.qcut(
+            df_features['na_rate'], 
+            q=3,  # Réduit de 5 à 3
+            labels=['low', 'medium', 'high'],
+            duplicates='drop'
+        )
+    except ValueError:
+        df_features['na_bin'] = 'all'  # Fallback si pas assez de variance
+    
+    df_features['hole_bin'] = pd.cut(
+        df_features['max_hole'],
+        bins=[0, 12, 48, float('inf')],
+        labels=['small', 'medium', 'large']
+    )
+    
+    # Combiner en une seule stratification
+    df_features['strat_key'] = df_features['na_bin'].astype(str) + '_' + df_features['hole_bin'].astype(str)
+    
+    # Vérifier si stratification possible
+    class_counts = df_features['strat_key'].value_counts()
+    min_count = class_counts.min()
+    
+    if min_count < 2:
+        print(f"⚠ Stratification impossible (classe min={min_count}), fallback shuffle aléatoire")
+        train_cols, val_cols = train_test_split(
+            df_features['col'].tolist(),
+            test_size=test_size,
+            random_state=random_state,
+            stratify=None  # Pas de stratification
+        )
+    else:
+        train_cols, val_cols = train_test_split(
+            df_features['col'].tolist(),
+            test_size=test_size,
+            random_state=random_state,
+            stratify=df_features['strat_key']
+        )
+    
+    # Afficher la distribution
+    print(f"\n✓ Split : {len(train_cols)} train, {len(val_cols)} val")
+    
+    for split_name, split_cols in [('Train', train_cols), ('Val', val_cols)]:
+        subset = df_features[df_features['col'].isin(split_cols)]
+        print(f"  {split_name}: NA rate={subset['na_rate'].mean():.3f}, max_hole={subset['max_hole'].mean():.1f}")
+    
+    return train_cols, val_cols
 
 def pretrain_model(
     model,
@@ -220,11 +310,10 @@ def pretrain_model(
         oversample_large=True
     )
 
-    # 2. Split 90/10
-    cols = list(X_masked.columns)
-    n_train = int(0.9 * len(cols))
-    train_cols = cols[:n_train]
-    val_cols = cols[n_train:]
+    # 2. Split 90/10 
+    
+    train_cols, val_cols = stratified_split_by_holes(X_masked, test_size=0.1, random_state=42)
+
     
     print(f"\nPré-entraînement : {len(train_cols):,} train, {len(val_cols):,} val")
 
@@ -254,12 +343,7 @@ def pretrain_model(
         shuffle=False
     )
 
-    # 6. Ajuster config pour pré-entraînement
-    orig_lr = config.learning_rate
-    orig_epochs = config.num_epochs
-
-    # Learning rate adaptatif
-    config.learning_rate = 0.0005 if config.use_interpolation else 0.0001
+    # Learning rate adaptatif 
     config.num_epochs = n_epochs_pretrain
 
     print(f"\nHyperparamètres pré-entraînement :")
@@ -272,13 +356,8 @@ def pretrain_model(
         model, train_loader, val_loader, config, train_dataset.scaler
     )
 
-    # 8. Reset config
-    config.learning_rate = orig_lr
-    config.num_epochs = orig_epochs
-
     print("✓ Pré-entraînement terminé")
     return model, train_dataset.scaler
-
 
 def finetune_model(
     model,
@@ -287,7 +366,7 @@ def finetune_model(
     Y_tr,
     holed_cols,
     config
-):  # ← Plus de DatasetClass !
+):  
     """
     Fine-tuning générique utilisant le FeatureExtractor de la config
     
@@ -309,10 +388,11 @@ def finetune_model(
     print(f"Features utilisées : {config.feature_extractor}")
 
     # Split 80/20
-    n = len(holed_cols)
-    n_train = int(0.8 * n)
-    train_cols = holed_cols[:n_train]
-    val_cols = holed_cols[n_train:]
+    train_cols, val_cols = stratified_split_by_holes(
+    X_tr[holed_cols], 
+    test_size=0.2,  # 80/20 pour fine-tuning
+    random_state=42
+)
     
     print(f"Fine-tuning : {len(train_cols)} train, {len(val_cols)} val")
 

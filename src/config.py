@@ -15,7 +15,7 @@ class ModelConfig:
         # ==============================
         # ARCHITECTURE MODÈLE
         # ==============================
-        self.hidden_size = 256  # Augmenté pour plus de capacité
+        self.hidden_size = 128  # Augmenté pour plus de capacité
         self.num_layers = 3
         self.dropout = 0.3
         
@@ -24,23 +24,25 @@ class ModelConfig:
         # ==============================
         self.batch_size = 64
         self.learning_rate = 0.0005
-        self.num_epochs = 50
+        self.num_epochs = 20
         self.patience = 10
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
+        print(f"Device set to : {self.device}")         
         # ==============================
         # PIPELINE
         # ==============================
-        self.do_finetuning = False
+        self.do_finetuning = True
         
         # ==============================
         # FLAGS FEATURES
         # ==============================
         # IMPORTANT : Définir AVANT de construire feature_extractor
+        print("Check")
         self.use_interpolation = True
         self.use_temporal = True
         self.use_rolling_stats = True
-        self.use_hourly_profile = True
+        self.use_hourly_profile = False
         self.use_clusters = False
         
         # ==============================
@@ -79,10 +81,9 @@ class ModelConfig:
         # ==============================
         if self.use_rolling_stats:
             features.append(RollingStatsFeature(
-                windows=[6, 12],  # 3h et 6h (timestep=30min)
-                include_slope=True,
-                include_stability=True
-            ))
+                rolling_windows=[6, 12],        # 3h et 6h
+                slope_window=6
+        ))
         
         # ==============================
         # HOURLY PROFILE

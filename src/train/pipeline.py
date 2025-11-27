@@ -1,4 +1,5 @@
 import pandas as pd
+import torch
 from models.BiLSTM import BiLSTMImputer
 from train.pre_training import pretrain_model, finetune_model   
 
@@ -10,9 +11,11 @@ def train_bilstm(X_tr, X_test, Y_tr, holed_cols, config,
     """
 
     print("\n" + "="*60)
-    print("🚀 ENTRAÎNEMENT BiLSTM")
+    print(" ENTRAÎNEMENT BiLSTM")
     print(f"   Features : {config.feature_extractor}")
     print(f"   Fine-tuning activé : {config.do_finetuning}")
+    print(f" CUDA available : {torch.cuda.is_available()}")
+    print(f" Device check : {config.device}")
     print("="*60)
 
     # ==============================
@@ -30,6 +33,11 @@ def train_bilstm(X_tr, X_test, Y_tr, holed_cols, config,
     print(f"\n✓ Modèle : BiLSTMImputer")
     print(f"  Input size : {input_size}")
     print(f"  Paramètres : {sum(p.numel() for p in model.parameters()):,}")
+    
+    model_device = next(model.parameters()).device
+    print(f"\n✓ Model device : {model_device}")
+    if model_device.type != 'cuda' and torch.cuda.is_available():
+        print("  WARNING : Model is on CPU but CUDA is available!")
 
     # ==============================
     # 2. Préparer les données
@@ -42,7 +50,7 @@ def train_bilstm(X_tr, X_test, Y_tr, holed_cols, config,
         X_test[clean_cols_test]
     ], axis=1)
 
-    print(f"\n📂 Données :")
+    print(f"\n Données :")
     print(f"  - Total courbes complètes : {X_all_clean.shape[1]:,}")
     print(f"  - Courbes à trous : {len(holed_cols):,}")
 
@@ -73,7 +81,7 @@ def train_bilstm(X_tr, X_test, Y_tr, holed_cols, config,
         print("\n Fine-tuning SKIP")
 
     print("\n" + "="*60)
-    print("✅ ENTRAÎNEMENT TERMINÉ")
+    print(" ENTRAÎNEMENT TERMINÉ")
     print("="*60)
 
     return model, scaler
